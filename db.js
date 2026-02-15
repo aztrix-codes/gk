@@ -6,7 +6,7 @@ const pool = mysql.createPool({
     port: parseInt(process.env.DB_PORT),
     ssl: {
         ca: process.env.DB_SSL_CA ? process.env.DB_SSL_CA.split(String.raw`\n`).join('\n') : undefined,
-        rejectUnauthorized: true
+        rejectUnauthorized: false
     },
     waitForConnections: true,
     connectionLimit: 10,
