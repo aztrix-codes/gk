@@ -1,0 +1,205 @@
+-- 1. SETUP DATABASE
+USE defaultdb;
+
+-- 2. CLEANUP (Drop tables if they exist to start fresh)
+SET FOREIGN_KEY_CHECKS = 0;
+DROP TABLE IF EXISTS visitor_logs;
+DROP TABLE IF EXISTS supervisor_buildings;
+DROP TABLE IF EXISTS permissions;
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS flats;
+DROP TABLE IF EXISTS buildings;
+DROP TABLE IF EXISTS societies;
+DROP TABLE IF EXISTS `groups`; -- Fixed: Backticks added
+SET FOREIGN_KEY_CHECKS = 1;
+
+-- 3. CREATE TABLES
+
+-- Groups Table (Backticks required!)
+CREATE TABLE `groups` (
+    id VARCHAR(50) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    logo_url TEXT
+);
+
+CREATE TABLE societies (
+    id VARCHAR(50) PRIMARY KEY,
+    group_id VARCHAR(50),
+    name VARCHAR(100) NOT NULL,
+    address TEXT,
+    city VARCHAR(50),
+    state VARCHAR(50),
+    total_flats INT DEFAULT 0,
+    active_guards INT DEFAULT 0,
+    type ENUM('SOCIETY', 'STANDALONE') DEFAULT 'SOCIETY',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (group_id) REFERENCES `groups`(id) ON DELETE SET NULL
+);
+
+CREATE TABLE buildings (
+    id VARCHAR(50) PRIMARY KEY,
+    society_id VARCHAR(50) NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    type ENUM('GATE', 'RESIDENTIAL', 'AMENITY') NOT NULL,
+    FOREIGN KEY (society_id) REFERENCES societies(id) ON DELETE CASCADE
+);
+
+CREATE TABLE flats (
+    id VARCHAR(50) PRIMARY KEY,
+    building_id VARCHAR(50) NOT NULL,
+    number VARCHAR(20) NOT NULL,
+    owner_name VARCHAR(100),
+    resident_count INT DEFAULT 0,
+    FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE
+);
+
+CREATE TABLE users (
+    id VARCHAR(50) PRIMARY KEY,
+    role ENUM('SUPER_ADMIN', 'ADMIN', 'SUPERVISOR', 'GATEKEEPER') NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    phone VARCHAR(20),
+    lang VARCHAR(10) DEFAULT 'en',
+    profile_photo TEXT,
+    
+    assigned_society_id VARCHAR(50),
+    assigned_building_id VARCHAR(50), 
+    reporting_admin_id VARCHAR(50),   
+    
+    shift VARCHAR(50),                
+    current_shift VARCHAR(50),        
+    is_online BOOLEAN DEFAULT FALSE,
+    checkout_required BOOLEAN DEFAULT TRUE, 
+    
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (assigned_society_id) REFERENCES societies(id) ON DELETE SET NULL,
+    FOREIGN KEY (assigned_building_id) REFERENCES buildings(id) ON DELETE SET NULL,
+    FOREIGN KEY (reporting_admin_id) REFERENCES users(id) ON DELETE SET NULL
+);
+
+CREATE TABLE permissions (
+    user_id VARCHAR(50) PRIMARY KEY,
+    view_only BOOLEAN DEFAULT FALSE,
+    assign_shifts BOOLEAN DEFAULT FALSE,
+    create_gatekeeper BOOLEAN DEFAULT FALSE,
+    add_watchman BOOLEAN DEFAULT FALSE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE supervisor_buildings (
+    supervisor_id VARCHAR(50) NOT NULL,
+    building_id VARCHAR(50) NOT NULL,
+    PRIMARY KEY (supervisor_id, building_id),
+    FOREIGN KEY (supervisor_id) REFERENCES users(id) ON DELETE CASCADE,
+    FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE CASCADE
+);
+
+CREATE TABLE visitor_logs (
+    log_id VARCHAR(50) PRIMARY KEY,
+    gatekeeper_id VARCHAR(50),
+    
+    visitor_name VARCHAR(100) NOT NULL,
+    visitor_type ENUM('SERVICE', 'GUEST', 'DELIVERY', 'CAB') NOT NULL,
+    visitor_phone VARCHAR(20),
+    photo_url TEXT, -- Ready for ImgBB URL
+    guest_count INT DEFAULT 1,
+    
+    visiting_building_id VARCHAR(50),
+    visiting_flat VARCHAR(50),
+    
+    status ENUM('INSIDE', 'EXITED') DEFAULT 'INSIDE',
+    entry_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    exit_time DATETIME,
+    allowed_time_minutes INT,
+    
+    FOREIGN KEY (gatekeeper_id) REFERENCES users(id) ON DELETE SET NULL,
+    FOREIGN KEY (visiting_building_id) REFERENCES buildings(id) ON DELETE SET NULL
+);
+
+-- 4. INSERT DUMMY DATA
+
+-- Groups
+INSERT INTO `groups` (id, name, logo_url) VALUES
+('G01', 'Prestige Group', 'https://fakeimg.pl/100x100/?text=Prestige'),
+('G02', 'Lodha Developers', 'https://fakeimg.pl/100x100/?text=Lodha');
+
+-- Societies
+INSERT INTO societies (id, group_id, name, address, city, state, total_flats, active_guards, type) VALUES
+('S01', 'G01', 'Green Valley Residency', 'Electronic City Phase 1', 'Bangalore', 'KA', 450, 8, 'SOCIETY'),
+('S02', 'G02', 'Blue Ridge Township', 'Hinjewadi IT Park', 'Pune', 'MH', 600, 10, 'SOCIETY');
+
+-- Buildings
+INSERT INTO buildings (id, society_id, name, type) VALUES
+('B01', 'S01', 'Main Gate (Entry)', 'GATE'),
+('B02', 'S01', 'Main Gate (Exit)', 'GATE'),
+('B03', 'S01', 'Tower A (Rose)', 'RESIDENTIAL'),
+('B04', 'S01', 'Tower B (Lily)', 'RESIDENTIAL'),
+('B05', 'S01', 'Club House', 'AMENITY'),
+('B06', 'S02', 'Main Gate (North)', 'GATE'),
+('B07', 'S02', 'Main Gate (South)', 'GATE'),
+('B08', 'S02', 'Tower 1 (Alpha)', 'RESIDENTIAL'),
+('B09', 'S02', 'Tower 2 (Beta)', 'RESIDENTIAL'),
+('B10', 'S02', 'Tower 3 (Gamma)', 'RESIDENTIAL'),
+('B11', 'S02', 'Sports Complex', 'AMENITY');
+
+-- Flats
+INSERT INTO flats (id, building_id, number, owner_name, resident_count) VALUES
+('F101', 'B03', 'A-101', 'Amit Sharma', 4),
+('F102', 'B03', 'A-102', 'Priya Reddy', 2),
+('F201', 'B04', 'B-201', 'John Dsouza', 3),
+('F202', 'B04', 'B-202', 'Mohd. Rafi', 5),
+('F301', 'B08', '101-Alpha', 'S. Kulkarni', 2),
+('F302', 'B09', '505-Beta', 'Anjali Mehta', 1),
+('F303', 'B10', '902-Gamma', 'Raj Malhotra', 4);
+
+-- Users (Super Admin & Admins)
+INSERT INTO users (id, role, name, password, phone, assigned_society_id) VALUES
+('SA001', 'SUPER_ADMIN', 'Master Control', '123', '9999999999', NULL),
+('AD001', 'ADMIN', 'Ramesh Gupta', '123', '9876543201', 'S01'),
+('AD002', 'ADMIN', 'Sneha Patil', '123', '9876543202', 'S01'),
+('AD005', 'ADMIN', 'Suresh Nair', '123', '9876543205', 'S02'),
+('AD006', 'ADMIN', 'Pooja Hegde', '123', '9876543206', 'S02');
+
+-- Users (Supervisors)
+INSERT INTO users (id, role, name, password, phone, assigned_society_id, shift, reporting_admin_id) VALUES
+('SUP01', 'SUPERVISOR', 'Sup. Rajesh (M)', '123', '9800000001', 'S01', 'Morning', 'AD001'),
+('SUP02', 'SUPERVISOR', 'Sup. Mahesh (E)', '123', '9800000002', 'S01', 'Evening', 'AD001'),
+('SUP03', 'SUPERVISOR', 'Sup. Ganesh (N)', '123', '9800000003', 'S01', 'Night', 'AD001'),
+('SUP04', 'SUPERVISOR', 'Sup. Vilas (M)', '123', '9800000004', 'S02', 'Morning', 'AD005'),
+('SUP05', 'SUPERVISOR', 'Sup. Ashok (E)', '123', '9800000005', 'S02', 'Evening', 'AD005');
+
+-- Permissions
+INSERT INTO permissions (user_id, view_only, assign_shifts, create_gatekeeper, add_watchman) VALUES
+('SUP01', FALSE, TRUE, TRUE, TRUE),
+('SUP02', TRUE, FALSE, FALSE, FALSE),
+('SUP03', FALSE, TRUE, FALSE, TRUE),
+('SUP04', FALSE, TRUE, TRUE, TRUE),
+('SUP05', FALSE, TRUE, FALSE, FALSE);
+
+-- Supervisor Building Links
+INSERT INTO supervisor_buildings (supervisor_id, building_id) VALUES
+('SUP01', 'B01'), ('SUP01', 'B03'),
+('SUP04', 'B06'), ('SUP04', 'B08');
+
+-- Users (Gatekeepers)
+INSERT INTO users (id, role, name, password, phone, assigned_society_id, assigned_building_id, current_shift, is_online, checkout_required) VALUES
+('GK001', 'GATEKEEPER', 'Bahadur (Main Gate)', '123', '9000000001', 'S01', 'B01', 'Morning', TRUE, TRUE),
+('GK002', 'GATEKEEPER', 'Ramu (Tower A)', '123', '9000000002', 'S01', 'B03', 'Morning', TRUE, FALSE),
+('GK003', 'GATEKEEPER', 'Shyam (Tower B)', '123', '9000000003', 'S01', 'B04', 'Morning', TRUE, FALSE),
+('GK004', 'GATEKEEPER', 'Kishan (Main Exit)', '123', '9000000004', 'S01', 'B02', 'Night', FALSE, TRUE),
+('GK007', 'GATEKEEPER', 'Pandey (North Gate)', '123', '9000000007', 'S02', 'B06', 'Morning', TRUE, TRUE),
+('GK009', 'GATEKEEPER', 'Singh (Alpha)', '123', '9000000009', 'S02', 'B08', 'Evening', FALSE, FALSE),
+('GK011', 'GATEKEEPER', 'Mishra (Gamma)', '123', '9000000011', 'S02', 'B10', 'Morning', TRUE, FALSE);
+
+-- Visitor Logs (With simple DATE_SUB for compatibility)
+INSERT INTO visitor_logs (log_id, status, visitor_name, visitor_type, visitor_phone, visiting_flat, visiting_building_id, entry_time, allowed_time_minutes, gatekeeper_id, photo_url, guest_count) VALUES
+('L101', 'INSIDE', 'Zomato (Ravi)', 'DELIVERY', '9876500001', 'A-101', 'B03', DATE_SUB(NOW(), INTERVAL 10 MINUTE), 15, 'GK001', 'https://via.placeholder.com/150/FF0000/FFFFFF?text=Zomato', 1),
+('L102', 'INSIDE', 'Urban Company (AC)', 'SERVICE', '9876500002', 'B-201', 'B04', DATE_SUB(NOW(), INTERVAL 45 MINUTE), 60, 'GK003', 'https://via.placeholder.com/150/0000FF/FFFFFF?text=UC', 1),
+('L103', 'INSIDE', 'Mr. Verma (Guest)', 'GUEST', '9876500003', 'A-102', 'B03', DATE_SUB(NOW(), INTERVAL 120 MINUTE), NULL, 'GK001', NULL, 3),
+('L104', 'INSIDE', 'Amazon Delivery', 'DELIVERY', '9876500004', '101-Alpha', 'B08', DATE_SUB(NOW(), INTERVAL 5 MINUTE), 10, 'GK007', 'https://via.placeholder.com/150', 1),
+('L099', 'EXITED', 'Swiggy', 'DELIVERY', '9876500099', 'B-202', 'B04', DATE_SUB(NOW(), INTERVAL 300 MINUTE), 15, 'GK001', NULL, 1),
+('L098', 'EXITED', 'Rahul (Tutor)', 'GUEST', '9876500098', 'A-101', 'B03', DATE_SUB(NOW(), INTERVAL 1440 MINUTE), NULL, 'GK002', NULL, 1);
+
+-- Update exit times for history logs
+UPDATE visitor_logs SET exit_time = DATE_SUB(NOW(), INTERVAL 290 MINUTE) WHERE log_id = 'L099';
+UPDATE visitor_logs SET exit_time = DATE_SUB(NOW(), INTERVAL 1380 MINUTE) WHERE log_id = 'L098';
